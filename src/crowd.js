@@ -38,6 +38,8 @@ export class CrowdSystem {
 		/** { agent, x, y, z, vx, vz, speed, state, goal, hurry, wait }: read these every frame. */
 		this.members = [];
 		this.navigationChanged = false;
+		this.following = null;
+		this.followAt = 0;
 		navigation.onChange = () => {
 			this.navigationChanged = true;
 		};
@@ -89,8 +91,36 @@ export class CrowdSystem {
 		});
 	}
 
+	/**
+	 * Keeps everyone heading for a point that moves, a player or a pointer: call it whenever the point changes (a walkable
+	 * point, from Navigation.closest), and with null to let them go. A few people a frame take up the new point, so paths
+	 * are asked for steadily and the crowd turns like a crowd. Those already there stand.
+	 */
+	follow(point, { spread = 1 } = {}) {
+		this.following = point;
+		this.followSpread = spread;
+	}
+
+	followStep() {
+		const point = this.following;
+		const count = this.members.length;
+		if (!point || !count) return;
+		// Detour plans 8 paths a step, so about that many a frame stay in step with it.
+		for (let k = Math.min(count, Math.max(8, Math.ceil(count / 14))); k > 0; k--) {
+			this.followAt = (this.followAt + 1) % count;
+			const m = this.members[this.followAt];
+			m.pace ??= 0.92 + Math.random() * 0.16;
+			const angle = this.followAt * 2.39996;
+			const r = this.followSpread * Math.sqrt(this.followAt);
+			const place = this.navigation.closest({ x: point.x + Math.cos(angle) * r, y: point.y, z: point.z + Math.sin(angle) * r }, { x: this.followSpread * 1.5, y: 1.5, z: this.followSpread * 1.5 }) ?? point;
+			const from = m.state === MOVING ? m.goal : m;
+			if (dist2(from, place) > 0.5) this.send(m, place, m.pace);
+		}
+	}
+
 	/** Everyone runs somewhere of their own, anywhere connected to where they stand. */
 	scatter() {
+		this.following = null;
 		for (const member of this.members) {
 			const p = this.navigation.randomAround(member, this.range);
 			if (p) this.send(member, p, 1.15 + Math.random() * 0.35);
@@ -125,12 +155,15 @@ export class CrowdSystem {
 
 	/** Once a frame, after Navigation.update(): steps everyone and fills in where they are. */
 	update(dt) {
-		// Fixed steps with interpolation, as Recast's own examples do: the same behaviour at any frame rate.
-		this.crowd.update(1 / 60, dt, 3);
+		this.followStep();
+		// The frame's own time, and the agents' real positions. Not the library's fixed steps and interpolatedPosition:
+		// that only moves by how far the frame is through a step, and on a steady 60 Hz screen it's near 0 for long
+		// stretches, so people play their run on the spot and then catch up.
+		this.crowd.update(Math.min(dt, 1 / 20));
 		const replan = this.navigationChanged;
 		this.navigationChanged = false;
 		for (const m of this.members) {
-			const p = m.agent.interpolatedPosition;
+			const p = m.agent.position();
 			const v = m.agent.velocity();
 			m.x = p.x;
 			m.y = p.y;
@@ -148,7 +181,7 @@ export class CrowdSystem {
 				m.stuck = m.speed < 0.25 ? m.stuck + dt : 0;
 				// In a press someone may never reach their exact spot: near it and barely moving counts as there.
 				if (left < 0.12 || (m.stuck > 1 && left < 9) || m.stuck > 6) this.stand(m);
-			} else if (this.wander) {
+			} else if (this.wander && !this.following) {
 				m.wait -= dt;
 				if (m.wait <= 0) {
 					const next = this.navigation.randomAround(m, 5 + Math.random() * 14);
@@ -164,7 +197,7 @@ export class CrowdSystem {
 		member.hurry = 0;
 		member.stuck = 0;
 		member.goal = null;
-		member.wait = 2 + Math.random() * 9;
+		member.wait = 1 + Math.random() * 5;
 		member.agent.resetMoveTarget();
 		member.agent.maxSpeed = this.stroll;
 	}

@@ -41,21 +41,13 @@
 			{
 				"id": "speed",
 				"label": "Speed",
-				"hint": "How fast they go when you send them: a brisk walk at the low end, a sprint at the high end.",
+				"hint": "How fast they go after the pointer: a brisk walk at the low end, a sprint at the high end.",
 				"type": "number",
 				"min": 1,
 				"max": 6,
 				"step": 0.1,
 				"default": 2.8,
 				"unit": "m/s",
-				"essential": true
-			},
-			{
-				"id": "chase",
-				"label": "Chase the pointer",
-				"hint": "The crowd keeps heading for the pointer, the way a horde goes after a player.",
-				"type": "toggle",
-				"default": false,
 				"essential": true
 			},
 			{

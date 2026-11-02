@@ -7,7 +7,7 @@ engine: three
 
 Make enemies and crowds walk around any three.js level: build a navmesh from its meshes, spawn people, give them somewhere to go, and they flow around the walls and each other, re-routing when something lands in the way.
 
-It's [Recast and Detour](https://github.com/recastnavigation/recastnavigation) by Mikko Mononen (zlib), the navigation most game engines are built on, through [recast-navigation-js](https://github.com/isaac-mason/recast-navigation-js) by Isaac Mason (MIT), in its single-threaded build, so it needs no special hosting. Patch added a small API in metres, groups that arrive and stand instead of shoving for one spot, milling about, walk and run blending, and instanced mannequins. In the live demo, click anywhere to send the crowd, right click to drop a stone block in their way (or lift one), drag to orbit and scroll to zoom.
+It's [Recast and Detour](https://github.com/recastnavigation/recastnavigation) by Mikko Mononen (zlib), the navigation most game engines are built on, through [recast-navigation-js](https://github.com/isaac-mason/recast-navigation-js) by Isaac Mason (MIT), in its single-threaded build, so it needs no special hosting. Patch added a small API in metres, groups that arrive and stand instead of shoving for one spot, milling about, walk and run blending, and instanced mannequins. In the live demo, the crowd follows the pointer: click to drop a stone block in their way (or lift one), drag to orbit and scroll to zoom.
 
 Navigation: Recast and Detour by Mikko Mononen (zlib), in recast-navigation-js by Isaac Mason (MIT). Code here is MIT, art is CC0.
 
@@ -41,13 +41,13 @@ function frame(dt) {
 }
 ```
 
-**Enemies that chase the player.** Send them where the player is, a few times a second (not every frame: each `goTo` asks for new paths).
+**Enemies that chase the player.** Keep telling them where the player is. `follow` hands the point on to a few people a frame, so paths are asked for steadily, and those already there stand. It's how the demo follows the pointer.
 
 ```js
-setInterval(() => {
-	const at = nav.closest(player.position);
-	if (at) crowd.goTo(at, { spread: 0.9 });
-}, 280);
+// A few times a second, or whenever the player has moved a little:
+crowd.follow(nav.closest(player.position));
+// And to let them go:
+crowd.follow(null);
 ```
 
 **Your own level.** Pass what people walk on and bump into, nothing else:
@@ -68,6 +68,7 @@ nav.unblock(crate);
 A wall that breaks in the destruction block, a door that shuts, a barricade a player builds: each is one `block` or `unblock`. Up to 48 obstacles by default (`maxObstacles`); only boxes here, though Recast's tile cache also has cylinders (`nav.tileCache.addCylinderObstacle`).
 
 **Other orders.**
+- `crowd.goTo(point)`: everyone, once, to a place of their own around a point.
 - `crowd.scatter()`: everyone runs somewhere of their own.
 - `crowd.goTo(point, { members, hurry, spread })`: a squad, not the whole crowd.
 - `crowd.send(member, point, hurry)`: one person; `hurry` scales the speed, and 0 is a stroll.
@@ -93,13 +94,15 @@ scene.add(...figures.meshes);
 figures.update(crowd.members, dt);
 ```
 
-Frame cost here, on a desktop, with 200 people: `crowd.update` about 1 to 2 ms, `figures.update` under 3 ms. Detour's crowd gets slower with people packed close, and the demo stops at 200; try your own numbers on a laptop before planning for more.
+Frame cost here, on a desktop, with 200 people: the crowd and figures together about 2 ms, or about 8 ms with the processor slowed 4 times. Drawing is the heavier part: 200 people is 1.16 million triangles a frame with shadows, so the demo measures the graphics card while it warms up and settles what to draw before anyone sees it. Detour's crowd gets slower with people packed close, and the demo stops at 200; try your own numbers on a laptop before planning for more.
 
-**Warm it up before anyone sees it.** The demo keeps the canvas hidden while it builds every level's navmesh and draws one frame of each (three compiles a shader the first time it's drawn), drops and lifts a block once, and runs the crowd 3 seconds ahead so they're already walking when it shows. Do the same behind your own loading screen.
+**Warm it up before anyone sees it.** The demo keeps the canvas hidden while it builds every level's navmesh and draws one frame of each (three compiles a shader the first time it's drawn), drops and lifts a block once, and runs each level's crowd 5 seconds ahead so they're already walking when it shows. Do the same behind your own loading screen.
+
+**Read `agent.position()`, not `agent.interpolatedPosition`.** That one only moves by how far the frame is through a fixed step: on a steady 60 Hz screen that's near 0 for long stretches, so people play their run on the spot, then catch up. `crowd.js` steps with the frame's own time for this reason.
 
 ## Controls
 
-The block page talks to the demo over the `patch-block` message channel (`lib/patch-block.js`). Sending and blocking happen in the frame.
+The block page talks to the demo over the `patch-block` message channel (`lib/patch-block.js`). Following and blocking happen in the frame.
 
 **For people** (the block page shows these):
 
@@ -107,8 +110,7 @@ The block page talks to the demo over the `patch-block` message channel (`lib/pa
 |---|---|---|---|---|
 | `level` | Level | choice | 3 options with pictures; default Market square | Where the crowd is. |
 | `crowd` | Crowd size | number | 10 to 200, default 70 | How many people are on the level. |
-| `speed` | Speed | number | 1 to 6 m/s, default 2.8 | How fast they go when sent. |
-| `chase` | Chase the pointer | toggle | default off | The crowd keeps heading for the pointer. |
+| `speed` | Speed | number | 1 to 6 m/s, default 2.8 | How fast they go after the pointer. |
 | `walkable` | Show walkable area | toggle | default off | Draws the navmesh. |
 
 **For agents** (in `recipe.json`, not on the page):

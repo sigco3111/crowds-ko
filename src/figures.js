@@ -166,6 +166,14 @@ export class CrowdFigures {
 		return low.speed * low.duration * (1 - k) + high.speed * high.duration * k;
 	}
 
+	/** Puts everyone where they really are, at full size, with nothing to ease from: for a level coming into view. */
+	place(members) {
+		for (const m of members) m.show = undefined;
+		this.update(members, 0);
+		for (const m of members) m.show.grow = 1;
+		this.update(members, 0);
+	}
+
 	/**
 	 * Once a frame: `members` come from CrowdSystem. Each gets its own smoothed place and turn, so a push from a
 	 * neighbour never shows as a twitch, its own height and shade, and the pose its speed asks for.

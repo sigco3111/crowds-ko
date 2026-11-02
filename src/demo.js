@@ -1,11 +1,12 @@
-// The crowds block's demo: a crowd of Patch's mannequins on a small diorama. Click anywhere and they go there, around
-// the buildings and each other; right click drops a stone block in the way and they find another way. The navigation
+// The crowds block's demo: a crowd of Patch's mannequins on a small diorama. They follow the pointer, around the
+// buildings and each other; a click drops a stone block in the way and they find another way. The navigation
 // is Recast and Detour through recast-navigation-js (navigation.js, crowd.js); the levels are Kenney's kits (levels.js);
 // Patch's block page steers it through Patch's block demo helper (lib/patch-block.js), with its controls in recipe.json.
 import { NeutralToneMapping, CanvasTexture, Color, DirectionalLight, DoubleSide, Group, HalfFloatType, HemisphereLight, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial, PCFShadowMap, PerspectiveCamera, PMREMGenerator, Raycaster, RingGeometry, Scene, SphereGeometry, SpriteMaterial, Sprite, SRGBColorSpace, Vector2, Vector3, WebGLRenderer, WebGLRenderTarget, BackSide, ShaderMaterial } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { N8AOPass } from 'n8ao';
 import { NavMeshHelper } from '@recast-navigation/three';
@@ -102,7 +103,9 @@ class App {
 		this.ray = new Raycaster();
 		this.pointer = new Vector2();
 		this.hover = null;
-		this.chaseAt = 0;
+		this.pointerMoved = 0;
+		this.followAt = 0;
+		this.scatteredAt = -1e9;
 		this.frameTimes = [];
 		this.sky();
 		this.lights();
@@ -171,6 +174,15 @@ class App {
 		this.ao.beautyRenderTarget.samples = 4;
 		this.composer.addPass(this.ao);
 		this.composer.addPass(new OutputPass());
+		// The same picture without ambient occlusion, for a weak graphics card: warmed up with the rest, so turning to it
+		// compiles nothing.
+		this.plain = new EffectComposer(this.renderer, new WebGLRenderTarget(4, 4, { type: HalfFloatType, samples: 2 }));
+		this.plain.setPixelRatio(this.pixelRatio);
+		this.plain.addPass(new RenderPass(this.scene, this.camera));
+		this.plain.addPass(new OutputPass());
+		this.usePlain = false;
+		this.shadowHalf = false;
+		this.tick = 0;
 	}
 
 	resize() {
@@ -181,6 +193,7 @@ class App {
 		this.h = h;
 		this.renderer.setSize(w, h, false);
 		this.composer.setSize(w, h);
+		this.plain.setSize(w, h);
 		this.camera.aspect = w / h;
 		// Keep the whole level in a tall frame.
 		this.camera.fov = w / h < 1.1 ? 30 * (1.1 / (w / h)) : 30;
@@ -244,7 +257,7 @@ class App {
 		ring.renderOrder = 3;
 		ring.visible = false;
 		this.scene.add(ring);
-		this.ring = { mesh: ring, age: 9 };
+		this.ring = { mesh: ring, age: 0, level: 0, want: null, shown: false };
 	}
 
 	useStage(id, snap) {
@@ -262,7 +275,7 @@ class App {
 		if (this.v.walkable) stage.overlay.update();
 		stage.overlay.visible = this.v.walkable;
 		this.applyPeople();
-		for (const m of stage.crowd.members) m.show = undefined;
+		this.figures.place(stage.crowd.members);
 		this.orbit.frame(stage.level.framing, snap);
 		const size = stage.level.size * 1.45;
 				Object.assign(this.sun.shadow.camera, { left: -size, right: size, top: size, bottom: -size });
@@ -316,7 +329,10 @@ class App {
 	}
 
 	trigger(id) {
-		if (id === 'scatter') this.stage.crowd.scatter();
+		if (id === 'scatter') {
+			this.stage.crowd.scatter();
+			this.scatteredAt = performance.now();
+		}
 		if (id === 'clear') this.clearBlocks();
 	}
 
@@ -344,17 +360,10 @@ class App {
 		return nav.closest({ x: point.x, y: 0, z: point.z }, { x: 8, y: 2, z: 8 });
 	}
 
+	/** A tap on a touch screen, where there's no pointer to follow. */
 	sendTo(point) {
 		const at = this.walkableAt(point);
-		if (!at) return;
-		this.stage.crowd.goTo(at);
-		this.pingAt(at);
-	}
-
-	pingAt(at) {
-		this.ring.mesh.position.set(at.x, at.y + 0.1, at.z);
-		this.ring.age = 0;
-		this.ring.mesh.visible = true;
+		if (at) this.stage.crowd.goTo(at);
 	}
 
 	/** A block drops at a point: it blocks the floor as it lands, and the crowd asks for new ways. */
@@ -469,36 +478,61 @@ class App {
 		stage.navigation.update();
 		if (stage.overlay.visible && stage.crowd.navigationChanged) stage.overlay.update();
 		stage.crowd.update(dt);
-		this.chase();
+		this.follow();
 		this.stepBlocks(dt);
 		this.figures.update(stage.crowd.members, dt);
 		this.orbit.update(dt);
 		this.markers(dt);
 	}
 
-	/** With "Chase the pointer" on, the crowd keeps heading for wherever the pointer is. */
-	chase() {
-		if (!this.v.chase || !this.hover) return;
+	/**
+	 * The crowd follows the pointer, a few times a second (a raycast and a few path checks). With the pointer resting a
+	 * while they go back to milling about, and with no pointer over the frame they do that anyway. After Scatter, they
+	 * stay scattered until the pointer moves.
+	 */
+	follow() {
+		const crowd = this.stage.crowd;
 		const now = performance.now();
-		if (now < this.chaseAt) return;
-		this.chaseAt = now + 280;
-		const at = this.walkableAt(this.pick(this.hover.x, this.hover.y) ?? this.camera.position);
-		if (at) this.stage.crowd.goTo(at, { spread: 0.9 });
+		if (this.dragging) return;
+		if (!this.hover || this.pointerMoved < this.scatteredAt || now - this.pointerMoved > 7000) {
+			crowd.follow(null);
+			return;
+		}
+		if (now < this.followAt) return;
+		this.followAt = now + 160;
+		const point = this.pick(this.hover.x, this.hover.y);
+		const at = point && this.walkableAt(point);
+		if (!at) return;
+		crowd.follow(at, { spread: 0.95 });
+		this.ring.want = at;
 	}
 
+	/** A soft ring where the crowd is heading, easing after the pointer. */
 	markers(dt) {
 		const r = this.ring;
-		if (!r.mesh.visible) return;
+		const on = Boolean(r.want && this.stage.crowd.following);
+		r.level += ((on ? 0.75 : 0) - r.level) * (1 - Math.exp(-dt * 9));
+		r.mesh.visible = r.level > 0.01;
+		if (!r.want) return;
+		const at = r.mesh.position;
+		if (!r.shown) {
+			at.set(r.want.x, r.want.y + 0.04, r.want.z);
+			r.shown = true;
+		}
+		const k = 1 - Math.exp(-dt * 16);
+		at.x += (r.want.x - at.x) * k;
+		at.y += (r.want.y + 0.04 - at.y) * k;
+		at.z += (r.want.z - at.z) * k;
 		r.age += dt;
-		const k = Math.min(1, r.age / 1.1);
-		const s = 1 + (1 - (1 - k) ** 3) * 2.6;
+		const s = 1.25 + Math.sin(r.age * 3.2) * 0.1;
 		r.mesh.scale.set(s, 1, s);
-		r.mesh.material.opacity = (1 - k) * 0.9;
-		if (k >= 1) r.mesh.visible = false;
+		r.mesh.material.opacity = r.level;
+		if (!on) r.shown = false;
 	}
 
 	draw() {
-		this.composer.render();
+		if (this.shadowHalf) this.sun.shadow.needsUpdate = this.tick++ % 2 === 0;
+		(this.usePlain ? this.plain : this.composer).render();
 	}
 
 	/** Everything first-use, unseen: each level drawn, with its overlay, a block, dust and the marker. */
@@ -515,10 +549,13 @@ class App {
 			this.stage.overlay.visible = this.v.walkable;
 			await new Promise((r) => requestAnimationFrame(r));
 		}
+		this.plain.render();
 		// A block, dust and the marker, once each.
 		this.useStage(first, true);
 		const home = this.stage.crowd.home;
-		this.pingAt(home);
+		this.ring.mesh.position.set(home.x, home.y + 0.1, home.z);
+		this.ring.mesh.visible = true;
+		this.ring.mesh.material.opacity = 0.5;
 		for (const b of this.blockPool.slice(0, 1)) {
 			b.position.set(home.x, 0.1, home.z);
 			b.visible = true;
@@ -539,15 +576,14 @@ class App {
 		this.stage.navigation.update();
 		if (o) this.stage.navigation.unblock(o);
 		this.stage.navigation.update();
-		// A few seconds of crowd, ahead of time: everyone is already on their way when it's seen.
-		for (const id of [...Object.keys(this.stages).filter((k) => k !== first), first]) {
-			const s = this.stages[id];
+		// Some seconds of crowd, ahead of time, on every level: everyone is already on their way when it's seen, and paths
+		// have been found. Then the first level's figures start exactly where its people are.
+		for (const s of Object.values(this.stages)) {
 			s.crowd.resize(this.v.crowd);
-			for (let k = 0; k < 90; k++) {
-				s.crowd.update(1 / 30);
-				if (id === first) this.figures.update(s.crowd.members, 1 / 30);
-			}
+			for (let k = 0; k < 150; k++) s.crowd.update(1 / 30);
 		}
+		this.figures.place(this.stage.crowd.members);
+		await this.settleQuality();
 		// Still unseen, until the graphics card has caught up: a few quick frames in a row, or two seconds at the most.
 		// On a first visit the shaders finish linking about now, and none of that may spill past ready.
 		const started = performance.now();
@@ -557,7 +593,7 @@ class App {
 			this.draw();
 			await new Promise((r) => requestAnimationFrame(r));
 			const now = performance.now();
-			calm = now - last < 28 ? calm + 1 : 0;
+			calm = now - last < 40 ? calm + 1 : 0;
 			last = now;
 		}
 		canvas.style.visibility = '';
@@ -574,30 +610,34 @@ class App {
 		});
 		canvas.addEventListener('pointermove', (e) => {
 			this.hover = { x: e.clientX, y: e.clientY };
+			this.pointerMoved = performance.now();
 			if (!down) return;
 			const dx = e.clientX - down.x;
 			const dy = e.clientY - down.y;
 			down.moved = Math.max(down.moved, Math.hypot(dx, dy));
 			if (down.moved > 5) {
 				canvas.classList.add('drag');
+				this.dragging = true;
 				this.orbit.want.yaw = down.yaw - dx * 0.006;
 				this.orbit.want.pitch = MathUtils.clamp(down.pitch + dy * 0.005, 0.28, 1.32);
 			}
 		});
 		const up = (e) => {
 			canvas.classList.remove('drag');
+			this.dragging = false;
 			if (!down) return;
 			const was = down;
 			down = null;
 			if (was.moved > 5) return;
 			const point = this.pick(e.clientX, e.clientY);
 			if (!point) return;
-			if (was.button === 2) this.dropBlock(point);
-			else if (was.button === 0) this.sendTo(point);
+			if (e.pointerType === 'touch') this.sendTo(point);
+			else this.dropBlock(point);
 		};
 		canvas.addEventListener('pointerup', up);
 		canvas.addEventListener('pointercancel', () => {
 			down = null;
+			this.dragging = false;
 			canvas.classList.remove('drag');
 		});
 		canvas.addEventListener('pointerleave', () => {
@@ -615,21 +655,61 @@ class App {
 	}
 
 	/**
-	 * Draws fewer pixels if the frame can't keep up; never asks anyone. Only ever the render scale: fewer shadow pixels
-	 * or AO samples would recompile shaders, and that's a freeze of its own while the frame is already struggling.
+	 * One step down in what's drawn, if there's one left. Nothing here compiles a shader, which would be a freeze of its
+	 * own: extra pixels first, then the shadows every other frame, the picture without ambient occlusion, fewer pixels.
 	 */
+	lower() {
+		const scale = (ratio) => {
+			this.pixelRatio = ratio;
+			this.renderer.setPixelRatio(ratio);
+			this.composer.setPixelRatio(ratio);
+			this.plain.setPixelRatio(ratio);
+			this.w = 0;
+			this.resize();
+		};
+		this.lowered = (this.lowered ?? 0) + 1;
+		if (this.pixelRatio > 1) scale(Math.max(1, this.pixelRatio - 0.5));
+		else if (!this.shadowHalf) {
+			this.shadowHalf = true;
+			this.sun.shadow.autoUpdate = false;
+		} else if (!this.usePlain) this.usePlain = true;
+		else if (this.pixelRatio > 0.75) scale(0.75);
+		else return false;
+		return true;
+	}
+
+	/** Measures what the graphics card really takes, unseen, and settles on what it can draw before anyone sees it. */
+	async settleQuality() {
+		const gl = this.renderer.getContext();
+		const pixel = new Uint8Array(4);
+		for (let round = 0; round < 3; round++) {
+			const times = [];
+			for (let k = 0; k < 3; k++) {
+				const t = performance.now();
+				this.step(1 / 60);
+				this.draw();
+				gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel); // waits for the card to finish
+				times.push(performance.now() - t);
+				await new Promise((r) => requestAnimationFrame(r));
+			}
+			times.sort((a, c) => a - c);
+			this.measured = times[1];
+			// As many steps down as it looks like it needs, not one at a time: on a slow card a round takes a while.
+			const steps = this.measured < 22 ? 0 : this.measured < 45 ? 1 : this.measured < 90 ? 2 : 3;
+			if (!steps) return;
+			for (let k = 0; k < steps; k++) if (!this.lower()) return;
+		}
+	}
+
+	/** After that, the same steps if the frame can't keep up: judged every second and a half, never asking anyone. */
 	govern(ms) {
 		this.frameTimes.push(ms);
-		if (this.frameTimes.length < 120) return;
+		this.frameSpan = (this.frameSpan ?? 0) + ms;
+		if (this.frameSpan < 1500 || this.frameTimes.length < 4) return;
 		const sorted = [...this.frameTimes].sort((a, b) => a - b);
 		this.frameTimes.length = 0;
-		if (sorted[60] < 30 || this.pixelRatio <= 0.75) return;
-		this.pixelRatio = Math.max(0.75, this.pixelRatio - 0.25);
-		this.renderer.setPixelRatio(this.pixelRatio);
-		this.composer.setPixelRatio(this.pixelRatio);
-		this.w = 0;
-		this.resize();
-		this.governed = (this.governed ?? 0) + 1;
+		this.frameSpan = 0;
+		if (sorted[sorted.length >> 1] >= 30) this.lower();
 	}
 
 	/** For pictures (make-thumbs.mjs, make-cover.mjs): no label or tips. */
