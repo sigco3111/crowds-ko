@@ -2,8 +2,8 @@
 // demo.js reads its controls from that file.
 //
 // For people (blendi's standards, 2026-10-31): one way to choose (the level, each with its picture), a few plain
-// essentials (crowd size, speed, show the walkable area) and Scatter; the crowd follows the pointer and a click drops
-// a block, so neither needs a button. The rest is for agents, in this recipe with its range and default.
+// essentials (crowd size, speed, show the walkable area) and Scatter; a left click sends them and a right click places
+// a block, so neither needs a button or a mode. The rest is for agents, in this recipe with its range and default.
 //
 // Every level has its picture, thumbs/levels/<id>.webp: a still of it, captured from the built demo (make-thumbs.mjs)
 // and kept in this repo. `--no-images` leaves them out.
@@ -33,13 +33,13 @@ const recipe = {
 				essential: true,
 			},
 			{ id: 'crowd', label: 'Crowd size', hint: 'How many people are on the level.', type: 'number', min: 10, max: 200, step: 5, default: 70, essential: true },
-			{ id: 'speed', label: 'Speed', hint: 'How fast they go after the pointer: a brisk walk at the low end, a sprint at the high end.', type: 'number', min: 1, max: 6, step: 0.1, default: 2.8, unit: 'm/s', essential: true },
+			{ id: 'speed', label: 'Speed', hint: 'How fast they go when you send them: a brisk walk at the low end, a sprint at the high end.', type: 'number', min: 1, max: 6, step: 0.1, default: 2.8, unit: 'm/s', essential: true },
 			{ id: 'walkable', label: 'Show walkable area', hint: 'Draws the navmesh: the floor Recast worked out from the level, which re-cuts around every block you drop.', type: 'toggle', default: false, essential: true },
 			{ id: 'spacing', label: 'Personal space', hint: 'How hard people keep apart from each other. At 0 they brush past; at 4 they give each other room.', type: 'number', min: 0, max: 4, step: 0.1, default: 2 },
-			{ id: 'wander', label: 'Mill about', hint: 'Whether people stroll off on their own a few seconds after arriving, or stand where they were sent.', type: 'toggle', default: true },
+			{ id: 'wander', label: 'Mill about', hint: 'Whether people walk on their own: round the level until someone sends them, and off for a stroll a few seconds after arriving. Off, they stand.', type: 'toggle', default: true },
 		],
 		presets: [],
-		// The crowd follows the pointer and a click drops or lifts a block, so these two are the only buttons.
+		// A left click sends them and a right click places or lifts a block, so these two are the only buttons.
 		triggers: [
 			{ id: 'scatter', label: 'Scatter', hint: 'Everyone runs somewhere of their own.' },
 			{ id: 'clear', label: 'Clear blocks', hint: 'Takes away every stone block you dropped, and the crowd gets those ways back.' },

@@ -1,5 +1,5 @@
-// The crowds block's demo: a crowd of Patch's mannequins on a small diorama. They follow the pointer, around the
-// buildings and each other; a click drops a stone block in the way and they find another way. The navigation
+// The crowds block's demo: a crowd of Patch's mannequins on a small diorama. A left click sends them there, around the
+// buildings and each other; a right click drops a stone block in the way and they find another way. The navigation
 // is Recast and Detour through recast-navigation-js (navigation.js, crowd.js); the levels are Kenney's kits (levels.js);
 // Patch's block page steers it through Patch's block demo helper (lib/patch-block.js), with its controls in recipe.json.
 import { NeutralToneMapping, CanvasTexture, Color, DirectionalLight, DoubleSide, Group, HalfFloatType, HemisphereLight, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial, PCFShadowMap, PerspectiveCamera, PMREMGenerator, Raycaster, RingGeometry, Scene, SphereGeometry, SpriteMaterial, Sprite, SRGBColorSpace, Vector2, Vector3, WebGLRenderer, WebGLRenderTarget, BackSide, ShaderMaterial } from 'three';
@@ -13,12 +13,14 @@ import { NavMeshHelper } from '@recast-navigation/three';
 import { patchBlock } from 'patch-block';
 import { block as recipeBlock } from '../recipe.json';
 import { initNavigation, Navigation } from './navigation.js';
-import { CrowdSystem } from './crowd.js';
+import { CrowdSystem, MOVING } from './crowd.js';
 import { CrowdFigures } from './figures.js';
 import { castle, Kit, market, maze } from './levels.js';
 
 const MAX_PEOPLE = 200;
 const MAX_BLOCKS = 12;
+/** How fast they walk the level before anyone's sent them, m/s. */
+const TOUR_SPEED = 1.4;
 const canvas = document.getElementById('view');
 const label = document.getElementById('label');
 
@@ -78,6 +80,10 @@ class Stage {
 		});
 		level.group.add(this.overlay);
 		this.blocks = [];
+		// Until someone sends them, the crowd walks the level from one good spot to the next.
+		this.taken = false;
+		this.leg = -1;
+		this.legTime = 0;
 	}
 }
 
@@ -102,10 +108,6 @@ class App {
 		this.orbit = new Orbit(this.camera);
 		this.ray = new Raycaster();
 		this.pointer = new Vector2();
-		this.hover = null;
-		this.pointerMoved = 0;
-		this.followAt = 0;
-		this.scatteredAt = -1e9;
 		this.frameTimes = [];
 		this.sky();
 		this.lights();
@@ -257,7 +259,7 @@ class App {
 		ring.renderOrder = 3;
 		ring.visible = false;
 		this.scene.add(ring);
-		this.ring = { mesh: ring, age: 0, level: 0, want: null, shown: false };
+		this.ring = { mesh: ring, age: 9 };
 	}
 
 	useStage(id, snap) {
@@ -286,12 +288,15 @@ class App {
 	applyPeople() {
 		const crowd = this.stage.crowd;
 		crowd.speed = this.v.speed;
-		crowd.wander = this.v.wander;
+		crowd.wander = this.v.wander && this.stage.taken;
 		crowd.setSpacing(this.v.spacing);
 		const had = crowd.members.length;
 		crowd.resize(this.v.crowd);
-		// Anyone new sets off straight away.
+		// Anyone new sets off straight away, with the others if they're on their way.
 		for (let i = had; i < crowd.members.length; i++) crowd.members[i].wait = Math.random() * 0.6;
+		if (this.touring(this.stage) && this.stage.spot && crowd.members.length > had) {
+			crowd.goTo(this.stage.spot, { members: crowd.members.slice(had), spread: 1.25, hurry: TOUR_SPEED / crowd.speed });
+		}
 		this.showLabel();
 	}
 
@@ -322,7 +327,7 @@ class App {
 				this.stage.crowd.setSpacing(value);
 				return;
 			case 'wander':
-				this.stage.crowd.wander = value;
+				this.stage.crowd.wander = value && this.stage.taken;
 				return;
 			default:
 		}
@@ -330,8 +335,8 @@ class App {
 
 	trigger(id) {
 		if (id === 'scatter') {
+			this.take();
 			this.stage.crowd.scatter();
-			this.scatteredAt = performance.now();
 		}
 		if (id === 'clear') this.clearBlocks();
 	}
@@ -360,10 +365,41 @@ class App {
 		return nav.closest({ x: point.x, y: 0, z: point.z }, { x: 8, y: 2, z: 8 });
 	}
 
-	/** A tap on a touch screen, where there's no pointer to follow. */
+	/** From the first order on, this level's crowd goes where it's told and mills about once it's there. */
+	take() {
+		this.stage.taken = true;
+		this.stage.crowd.wander = this.v.wander;
+	}
+
 	sendTo(point) {
 		const at = this.walkableAt(point);
-		if (at) this.stage.crowd.goTo(at);
+		if (!at) return;
+		this.take();
+		this.stage.crowd.goTo(at);
+		this.ring.mesh.position.set(at.x, at.y + 0.04, at.z);
+		this.ring.age = 0;
+		this.ring.mesh.visible = true;
+	}
+
+	touring(stage) {
+		return !stage.taken && this.v.wander;
+	}
+
+	/** Before the first order: the whole crowd walks to the level's next good spot, each to a place of their own. */
+	tour(stage, dt) {
+		if (!this.touring(stage)) return;
+		const crowd = stage.crowd;
+		stage.legTime -= dt;
+		const standing = crowd.members.reduce((n, m) => n + (m.state === MOVING ? 0 : 1), 0);
+		// On to the next spot as the first of them get there: the crowd is always on its way somewhere.
+		if (stage.legTime > 0 && standing < crowd.members.length * 0.35) return;
+		const spots = stage.level.tour;
+		stage.leg = (stage.leg + 1) % spots.length;
+		const [x, y, z] = spots[stage.leg];
+		stage.spot = stage.navigation.closest({ x, y, z }, { x: 3, y: 2, z: 3 });
+		if (!stage.spot) return;
+		stage.legTime = 9;
+		crowd.goTo(stage.spot, { spread: 1.25, hurry: TOUR_SPEED / crowd.speed });
 	}
 
 	/** A block drops at a point: it blocks the floor as it lands, and the crowd asks for new ways. */
@@ -478,56 +514,23 @@ class App {
 		stage.navigation.update();
 		if (stage.overlay.visible && stage.crowd.navigationChanged) stage.overlay.update();
 		stage.crowd.update(dt);
-		this.follow();
+		this.tour(stage, dt);
 		this.stepBlocks(dt);
 		this.figures.update(stage.crowd.members, dt);
 		this.orbit.update(dt);
 		this.markers(dt);
 	}
 
-	/**
-	 * The crowd follows the pointer, a few times a second (a raycast and a few path checks). With the pointer resting a
-	 * while they go back to milling about, and with no pointer over the frame they do that anyway. After Scatter, they
-	 * stay scattered until the pointer moves.
-	 */
-	follow() {
-		const crowd = this.stage.crowd;
-		const now = performance.now();
-		if (this.dragging) return;
-		if (!this.hover || this.pointerMoved < this.scatteredAt || now - this.pointerMoved > 7000) {
-			crowd.follow(null);
-			return;
-		}
-		if (now < this.followAt) return;
-		this.followAt = now + 160;
-		const point = this.pick(this.hover.x, this.hover.y);
-		const at = point && this.walkableAt(point);
-		if (!at) return;
-		crowd.follow(at, { spread: 0.95 });
-		this.ring.want = at;
-	}
-
-	/** A soft ring where the crowd is heading, easing after the pointer. */
+	/** A ring that spreads out where they've been sent. */
 	markers(dt) {
 		const r = this.ring;
-		const on = Boolean(r.want && this.stage.crowd.following);
-		r.level += ((on ? 0.75 : 0) - r.level) * (1 - Math.exp(-dt * 9));
-		r.mesh.visible = r.level > 0.01;
-		if (!r.want) return;
-		const at = r.mesh.position;
-		if (!r.shown) {
-			at.set(r.want.x, r.want.y + 0.04, r.want.z);
-			r.shown = true;
-		}
-		const k = 1 - Math.exp(-dt * 16);
-		at.x += (r.want.x - at.x) * k;
-		at.y += (r.want.y + 0.04 - at.y) * k;
-		at.z += (r.want.z - at.z) * k;
+		if (!r.mesh.visible) return;
 		r.age += dt;
-		const s = 1.25 + Math.sin(r.age * 3.2) * 0.1;
+		const k = Math.min(1, r.age / 1.1);
+		const s = 1 + (1 - (1 - k) ** 3) * 2.6;
 		r.mesh.scale.set(s, 1, s);
-		r.mesh.material.opacity = r.level;
-		if (!on) r.shown = false;
+		r.mesh.material.opacity = (1 - k) * 0.9;
+		if (k >= 1) r.mesh.visible = false;
 	}
 
 	draw() {
@@ -580,7 +583,16 @@ class App {
 		// have been found. Then the first level's figures start exactly where its people are.
 		for (const s of Object.values(this.stages)) {
 			s.crowd.resize(this.v.crowd);
-			for (let k = 0; k < 150; k++) s.crowd.update(1 / 30);
+			const run = (steps) => {
+				for (let k = 0; k < steps; k++) {
+					this.tour(s, 1 / 30);
+					s.crowd.update(1 / 30);
+				}
+			};
+			run(150);
+			// A fresh leg just before it's seen, so everyone is in full stride, none of them just arriving.
+			s.legTime = 0;
+			run(45);
 		}
 		this.figures.place(this.stage.crowd.members);
 		await this.settleQuality();
@@ -603,45 +615,38 @@ class App {
 
 	input() {
 		let down = null;
-		canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+		// A right click places a block: it never opens the browser's menu, anywhere in the frame.
+		addEventListener('contextmenu', (e) => e.preventDefault());
 		canvas.addEventListener('pointerdown', (e) => {
 			canvas.setPointerCapture(e.pointerId);
 			down = { x: e.clientX, y: e.clientY, button: e.button, moved: 0, yaw: this.orbit.want.yaw, pitch: this.orbit.want.pitch };
 		});
 		canvas.addEventListener('pointermove', (e) => {
-			this.hover = { x: e.clientX, y: e.clientY };
-			this.pointerMoved = performance.now();
 			if (!down) return;
 			const dx = e.clientX - down.x;
 			const dy = e.clientY - down.y;
 			down.moved = Math.max(down.moved, Math.hypot(dx, dy));
 			if (down.moved > 5) {
 				canvas.classList.add('drag');
-				this.dragging = true;
 				this.orbit.want.yaw = down.yaw - dx * 0.006;
 				this.orbit.want.pitch = MathUtils.clamp(down.pitch + dy * 0.005, 0.28, 1.32);
 			}
 		});
 		const up = (e) => {
 			canvas.classList.remove('drag');
-			this.dragging = false;
 			if (!down) return;
 			const was = down;
 			down = null;
 			if (was.moved > 5) return;
 			const point = this.pick(e.clientX, e.clientY);
 			if (!point) return;
-			if (e.pointerType === 'touch') this.sendTo(point);
-			else this.dropBlock(point);
+			if (was.button === 2) this.dropBlock(point);
+			else if (was.button === 0) this.sendTo(point);
 		};
 		canvas.addEventListener('pointerup', up);
 		canvas.addEventListener('pointercancel', () => {
 			down = null;
-			this.dragging = false;
 			canvas.classList.remove('drag');
-		});
-		canvas.addEventListener('pointerleave', () => {
-			this.hover = null;
 		});
 		canvas.addEventListener(
 			'wheel',
@@ -667,7 +672,6 @@ class App {
 			this.w = 0;
 			this.resize();
 		};
-		this.lowered = (this.lowered ?? 0) + 1;
 		if (this.pixelRatio > 1) scale(Math.max(1, this.pixelRatio - 0.5));
 		else if (!this.shadowHalf) {
 			this.shadowHalf = true;
@@ -675,6 +679,7 @@ class App {
 		} else if (!this.usePlain) this.usePlain = true;
 		else if (this.pixelRatio > 0.75) scale(0.75);
 		else return false;
+		this.lowered = (this.lowered ?? 0) + 1;
 		return true;
 	}
 

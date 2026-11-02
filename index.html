@@ -16,15 +16,15 @@
     background: rgba(9, 9, 11, 0.62); border: 1px solid rgba(255, 255, 255, 0.08); }
   #label[hidden] { display: none; }
   #label .k { color: #a1a1aa; }
-  #tip { right: 12px; bottom: 10px; font-size: 10px; color: rgba(250, 250, 250, 0.82); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+  #tip { top: 12px; right: 12px; padding: 8px 11px; border-radius: 7px; background: rgba(9, 9, 11, 0.62); border: 1px solid rgba(255, 255, 255, 0.08); }
   #credit { left: 12px; bottom: 10px; font-size: 10px; color: rgba(250, 250, 250, 0.72); text-transform: none; letter-spacing: 0.02em; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
-  @media (max-width: 620px) { #tip, #credit { display: none; } }
+  @media (max-width: 720px) { #credit { display: none; } #tip { top: 48px; right: auto; left: 12px; } }
 </style>
 </head>
 <body>
 <canvas id="view"></canvas>
 <div id="label" class="hud" hidden><span class="name"></span><span class="k"></span></div>
-<div id="tip" class="hud">They follow the pointer · click drops or lifts a block · drag to orbit · scroll to zoom</div>
+<div id="tip" class="hud">Left click: send the crowd &nbsp;·&nbsp; Right click: place a block</div>
 <div id="credit" class="hud">Navigation: Recast &amp; Detour by Mikko Mononen (zlib), in recast-navigation-js by Isaac Mason (MIT)</div>
 <script type="module" src="./src/demo.js"></script>
 </body>

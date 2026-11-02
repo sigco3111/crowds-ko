@@ -41,7 +41,7 @@
 			{
 				"id": "speed",
 				"label": "Speed",
-				"hint": "How fast they go after the pointer: a brisk walk at the low end, a sprint at the high end.",
+				"hint": "How fast they go when you send them: a brisk walk at the low end, a sprint at the high end.",
 				"type": "number",
 				"min": 1,
 				"max": 6,
@@ -71,7 +71,7 @@
 			{
 				"id": "wander",
 				"label": "Mill about",
-				"hint": "Whether people stroll off on their own a few seconds after arriving, or stand where they were sent.",
+				"hint": "Whether people walk on their own: round the level until someone sends them, and off for a stroll a few seconds after arriving. Off, they stand.",
 				"type": "toggle",
 				"default": true
 			}
