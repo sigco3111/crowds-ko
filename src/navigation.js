@@ -18,7 +18,8 @@ export function initNavigation() {
  * they become walkable islands nobody can reach, and cut the floor away under solid buildings for the same reason. The
  * meshes don't have to be drawn.
  *
- * Building is Recast rasterising every triangle: 100 to 400 ms for a small level. Do it behind a loading screen, once.
+ * Building is Recast rasterising every triangle: under 100 ms for a small level, more for bigger ones. Do it behind a
+ * loading screen, once.
  */
 export class Navigation {
 	constructor(meshes, { agentRadius = 0.35, agentHeight = 1.9, stepHeight = 0.5, maxSlope = 46, cellSize = 0.2, cellHeight = 0.1, tileSize = 32, maxObstacles = 48 } = {}) {

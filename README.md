@@ -55,7 +55,7 @@ setInterval(() => {
 - A closed building's floor is an island too. Cut the floor away under it, or leave its inside out of the mesh.
 - `levels.js` keeps two sets for this: what it draws, and a `walk` mesh of the floor with holes cut under whatever stands on it, walled round. Stairs and ramps are just meshes: in the castle level the real walls and stairs go in, and people run up onto the walls.
 - `agentRadius` keeps people that far from walls. `stepHeight` is how high a step they take without noticing; keep it below anything they mustn't climb. `maxSlope` is in degrees.
-- `new Navigation` is Recast working through every triangle, 100 to 400 ms for a small level. Do it behind your loading screen, once. Keep the level small or set `cellSize` higher (0.3 m) if it's slow.
+- `new Navigation` is Recast working through every triangle, under 100 ms each for the demo's small levels and more for bigger ones. Do it behind your loading screen, once, and set `cellSize` higher (0.3 m) if it's slow.
 
 **Something lands in the way.** Obstacles re-cut the navmesh while the game runs, about a millisecond in this demo, and everyone's way is asked for again.
 
@@ -84,7 +84,7 @@ walker.update(m, dt);
 model.rotation.y = walker.yaw;
 ```
 
-**Big crowds.** `CrowdFigures` (`src/figures.js`) draws hundreds of Patch's mannequin (`public/models/mannequin.glb`, CC0) in 16 instanced draws, plus their shadows: rigid shells, no skin, with clips baked into tables at load.
+**Big crowds.** `CrowdFigures` (`src/figures.js`) draws hundreds of Patch's mannequin (`public/models/mannequin.glb`, CC0) in 17 instanced draws, plus their shadows: rigid shells, no skin, with clips baked into tables at load.
 
 ```js
 const figures = new CrowdFigures(await new GLTFLoader().loadAsync('models/mannequin.glb'), 200);
@@ -93,7 +93,7 @@ scene.add(...figures.meshes);
 figures.update(crowd.members, dt);
 ```
 
-Frame cost here, on a desktop, with 200 people: `crowd.update` about 1 to 2 ms, `figures.update` under 3 ms. Detour's crowd gets slower with people packed close, so 300 is about the most to plan for on a laptop.
+Frame cost here, on a desktop, with 200 people: `crowd.update` about 1 to 2 ms, `figures.update` under 3 ms. Detour's crowd gets slower with people packed close, and the demo stops at 200; try your own numbers on a laptop before planning for more.
 
 **Warm it up before anyone sees it.** The demo keeps the canvas hidden while it builds every level's navmesh and draws one frame of each (three compiles a shader the first time it's drawn), drops and lifts a block once, and runs the crowd 3 seconds ahead so they're already walking when it shows. Do the same behind your own loading screen.
 
