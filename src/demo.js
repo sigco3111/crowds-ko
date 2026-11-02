@@ -548,11 +548,18 @@ class App {
 				if (id === first) this.figures.update(s.crowd.members, 1 / 30);
 			}
 		}
-		this.step(1 / 60);
-		this.draw();
-		await new Promise((r) => requestAnimationFrame(r));
-		this.step(1 / 60);
-		this.draw();
+		// Still unseen, until the graphics card has caught up: a few quick frames in a row, or two seconds at the most.
+		// On a first visit the shaders finish linking about now, and none of that may spill past ready.
+		const started = performance.now();
+		let last = started;
+		for (let calm = 0; calm < 6 && performance.now() - started < 2000; ) {
+			this.step(1 / 60);
+			this.draw();
+			await new Promise((r) => requestAnimationFrame(r));
+			const now = performance.now();
+			calm = now - last < 28 ? calm + 1 : 0;
+			last = now;
+		}
 		canvas.style.visibility = '';
 		this.started = true;
 		this.showLabel();
@@ -607,28 +614,22 @@ class App {
 		);
 	}
 
-	/** Drops render scale, then shading detail, if the frame can't keep up; never asks anyone. */
+	/**
+	 * Draws fewer pixels if the frame can't keep up; never asks anyone. Only ever the render scale: fewer shadow pixels
+	 * or AO samples would recompile shaders, and that's a freeze of its own while the frame is already struggling.
+	 */
 	govern(ms) {
 		this.frameTimes.push(ms);
-		if (this.frameTimes.length < 90) return;
+		if (this.frameTimes.length < 120) return;
 		const sorted = [...this.frameTimes].sort((a, b) => a - b);
 		this.frameTimes.length = 0;
-		const typical = sorted[45];
-		if (typical < 26) return;
-		if (this.pixelRatio > 1) {
-			this.pixelRatio = Math.max(1, this.pixelRatio - 0.5);
-			this.renderer.setPixelRatio(this.pixelRatio);
-			this.composer.setPixelRatio(this.pixelRatio);
-			this.w = 0;
-			this.resize();
-		} else if (this.renderer.shadowMap.enabled && this.sun.shadow.mapSize.x > 1024) {
-			this.sun.shadow.mapSize.set(1024, 1024);
-			this.sun.shadow.map?.dispose();
-			this.sun.shadow.map = null;
-		} else if (this.ao.configuration.aoSamples > 8) {
-			this.ao.configuration.aoSamples = 8;
-			this.ao.configuration.denoiseSamples = 4;
-		}
+		if (sorted[60] < 30 || this.pixelRatio <= 0.75) return;
+		this.pixelRatio = Math.max(0.75, this.pixelRatio - 0.25);
+		this.renderer.setPixelRatio(this.pixelRatio);
+		this.composer.setPixelRatio(this.pixelRatio);
+		this.w = 0;
+		this.resize();
+		this.governed = (this.governed ?? 0) + 1;
 	}
 
 	/** For pictures (make-thumbs.mjs, make-cover.mjs): no label or tips. */
