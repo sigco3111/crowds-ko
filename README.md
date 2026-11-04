@@ -11,6 +11,13 @@ It's [Recast and Detour](https://github.com/recastnavigation/recastnavigation) b
 
 Navigation: Recast and Detour by Mikko Mononen (zlib), in recast-navigation-js by Isaac Mason (MIT). Code here is MIT, art is CC0.
 
+## What this owns
+
+- **Renderer:** Neither, for navigation: `src/navigation.js` and `src/crowd.js` make no renderer and draw nothing. `CrowdFigures` in `src/figures.js` makes instanced meshes with `MeshStandardMaterial` for your scene. The `WebGLRenderer` in `src/demo.js` is the demo's.
+- **Frame loop:** It doesn't draw the frame. Call `nav.update()` and `crowd.update(dt)` from your own loop, then draw `crowd.members` however you like, or call `figures.update(crowd.members, dt)` or `walker.update(m, dt)`. The `EffectComposer` is only in `src/demo.js`.
+- **three:** `package.json` pins 0.186.1, `recast-navigation` 0.44.0 and `@recast-navigation/three` 0.44.0. It also pins `n8ao` and `postprocessing`, which none of the files below imports.
+- **Copy:** `src/navigation.js` and `src/crowd.js`, plus `src/walker.js` for rigged characters, or `src/figures.js` with `public/models/mannequin.glb` for big crowds.
+
 ## Use it in a game
 
 Copy `src/navigation.js` and `src/crowd.js`, plus `src/walker.js` for rigged characters or `src/figures.js` for big crowds of Patch's mannequin. They need `three`, `recast-navigation` and `@recast-navigation/three`.
