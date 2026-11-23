@@ -12,6 +12,7 @@ import { N8AOPass } from 'n8ao';
 import { NavMeshHelper } from '@recast-navigation/three';
 import { patchBlock } from 'patch-block';
 import { block as recipeBlock } from '../recipe.json';
+import { mountPanel } from './panel.js';
 import { initNavigation, Navigation } from './navigation.js';
 import { CrowdSystem, MOVING } from './crowd.js';
 import { CrowdFigures } from './figures.js';
@@ -766,6 +767,16 @@ async function main() {
 		},
 	});
 	block.ready();
+	// 단독 배포판 설정 패널 (임베드되면 mountPanel이 스스로 아무것도 하지 않는다).
+	mountPanel({
+		onSet(id, value) {
+			app.set(id, value);
+			block.state({ [id]: value });
+		},
+		onTrigger(id) {
+			app.trigger(id);
+		},
+	});
 	mark('ready');
 	window.__block = { app, values: v, block, boot };
 }
