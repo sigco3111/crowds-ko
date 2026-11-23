@@ -303,7 +303,7 @@ class App {
 	showLabel() {
 		if (!this.started) return;
 		label.querySelector('.name').textContent = this.stage.level.name;
-		label.querySelector('.k').textContent = `${this.stage.crowd.members.length} people`;
+		label.querySelector('.k').textContent = `${this.stage.crowd.members.length}명`;
 		label.hidden = false;
 	}
 

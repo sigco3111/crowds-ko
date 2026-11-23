@@ -565,7 +565,7 @@ export function market(town) {
 	walkFloor(b, W, D, R);
 	const { group, walk } = b.finish(pieces);
 	return {
-		id: 'market', name: 'Market square', group, walk, home: { x: 0, y: 0, z: 6 }, size: Math.max(W, D),
+		id: 'market', name: '장터', group, walk, home: { x: 0, y: 0, z: 6 }, size: Math.max(W, D),
 		// Round the fountain, through the alleys, out along the path.
 		tour: [[-5, 0, 1.5], [1, 0, -5.8], [11, 0, -9], [6, 0, 3.5], [0, 0, 13], [-11, 0, -8.5]],
 		framing: { target: [0, -0.5, 0.6], yaw: 0.46, pitch: 0.7, distance: 66 },
@@ -675,7 +675,7 @@ export function castle(keep, town) {
 	walkFloor(b, W, D, R, { moat });
 	const { group, walk } = b.finish([...pieces, water]);
 	return {
-		id: 'castle', name: 'Castle walls', group, walk, home: { x: 0, y: 0, z: 0 }, size: Math.max(W, D),
+		id: 'castle', name: '성벽', group, walk, home: { x: 0, y: 0, z: 0 }, size: Math.max(W, D),
 		// Across the courtyard, up onto the wall, back down and out over the bridge.
 		tour: [[6.5, 0, -1], [12, 3.4, -6], [-12, 3.4, 2], [-1, 0, 6.5], [0, 0, 18.5], [1, 0, -1]],
 		framing: { target: [0, -0.5, 0.8], yaw: 0.42, pitch: 0.76, distance: 70 },
@@ -833,7 +833,7 @@ export function maze(town) {
 	walkFloor(b, W, D, R);
 	const { group, walk } = b.finish(pieces);
 	return {
-		id: 'maze', name: 'Hedge maze', group, walk, home: { x: 6, y: 0, z: 0 }, size: W,
+		id: 'maze', name: '생울타리 미로', group, walk, home: { x: 6, y: 0, z: 0 }, size: W,
 		// Into the garden, out to the far corners, and back.
 		tour: [[2, 0, 4], [-13, 0, -13], [0, 0, -4.5], [13, 0, 13], [-4, 0, 1]],
 		framing: { target: [0, -0.5, 0.4], yaw: 0.36, pitch: 0.92, distance: 68 },

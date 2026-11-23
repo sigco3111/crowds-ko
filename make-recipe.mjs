@@ -14,9 +14,9 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const images = !process.argv.includes('--no-images');
 export const levels = [
-	['market', 'Market square'],
-	['castle', 'Castle walls'],
-	['maze', 'Hedge maze'],
+	['market', '장터'],
+	['castle', '성벽'],
+	['maze', '생울타리 미로'],
 ];
 
 const recipe = {
@@ -25,24 +25,24 @@ const recipe = {
 		controls: [
 			{
 				id: 'level',
-				label: 'Level',
-				hint: 'Where the crowd is: a market square with alleys behind the houses, a castle with ramps up to its walls, or a hedge maze with more than one way through.',
+				label: '레벨',
+				hint: '군중이 있는 곳: 집 뒤로 골목이 있는 장터, 성벽까지 이어지는 경사로가 있는 성, 또는 길이 여러 갈래인 생울타리 미로.',
 				type: 'choice',
 				options: levels.map(([value, label]) => ({ value, label, ...(images ? { image: `thumbs/levels/${value}.webp` } : {}) })),
 				default: 'market',
 				essential: true,
 			},
-			{ id: 'crowd', label: 'Crowd size', hint: 'How many people are on the level.', type: 'number', min: 10, max: 200, step: 5, default: 70, essential: true },
-			{ id: 'speed', label: 'Speed', hint: 'How fast they go when you send them: a brisk walk at the low end, a sprint at the high end.', type: 'number', min: 1, max: 6, step: 0.1, default: 2.8, unit: 'm/s', essential: true },
-			{ id: 'walkable', label: 'Show walkable area', hint: 'Draws the navmesh: the floor Recast worked out from the level, which re-cuts around every block you drop.', type: 'toggle', default: false, essential: true },
-			{ id: 'spacing', label: 'Personal space', hint: 'How hard people keep apart from each other. At 0 they brush past; at 4 they give each other room.', type: 'number', min: 0, max: 4, step: 0.1, default: 2 },
-			{ id: 'wander', label: 'Mill about', hint: 'Whether people walk on their own: round the level until someone sends them, and off for a stroll a few seconds after arriving. Off, they stand.', type: 'toggle', default: true },
+			{ id: 'crowd', label: '군중 규모', hint: '레벨 위에 있는 사람 수.', type: 'number', min: 10, max: 200, step: 5, default: 70, essential: true },
+			{ id: 'speed', label: '속도', hint: '보냈을 때 가는 속도: 낮은 쪽은 빠른 걸음, 높은 쪽은 전력 질주.', type: 'number', min: 1, max: 6, step: 0.1, default: 2.8, unit: 'm/s', essential: true },
+			{ id: 'walkable', label: '걸을 수 있는 영역 표시', hint: '내비메시를 그립니다: Recast가 레벨에서 계산해 낸 바닥으로, 블록을 놓으면 그 주변을 다시 깎습니다.', type: 'toggle', default: false, essential: true },
+			{ id: 'spacing', label: '개인 공간', hint: '사람들이 서로 얼마나 거리를 두는지. 0이면 스쳐 지나가고, 4면 서로 넉넉히 비켜 줍니다.', type: 'number', min: 0, max: 4, step: 0.1, default: 2 },
+			{ id: 'wander', label: '어슬렁거리기', hint: '사람들이 스스로 돌아다니는지 여부: 누군가 보내기 전까지 레벨을 돌아다니고, 도착하고 몇 초 뒤에는 산책을 나갑니다. 끄면 가만히 서 있습니다.', type: 'toggle', default: true },
 		],
 		presets: [],
 		// A left click sends them and a right click places or lifts a block, so these two are the only buttons.
 		triggers: [
-			{ id: 'scatter', label: 'Scatter', hint: 'Everyone runs somewhere of their own.' },
-			{ id: 'clear', label: 'Clear blocks', hint: 'Takes away every stone block you dropped, and the crowd gets those ways back.' },
+			{ id: 'scatter', label: '흩어지기', hint: '모두가 각자 어딘가로 달려갑니다.' },
+			{ id: 'clear', label: '블록 치우기', hint: '놓았던 돌 블록을 모두 치우고, 군중이 그 길을 다시 쓸 수 있게 합니다.' },
 		],
 	},
 	credits: [
