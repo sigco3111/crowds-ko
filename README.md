@@ -22,7 +22,9 @@ three.js로 만든 작은 디오라마 위에서 마네킹 군중이 벽과 서�
 
 ## 스크린샷
 
-(배포본 화면은 docs/screenshots/ 에 있습니다)
+![장터 레벨과 군중](docs/screenshots/1-장터.png)
+![왼쪽 클릭으로 군중 보내기](docs/screenshots/2-군중-보내기.png)
+![오른쪽 클릭으로 블록 놓기](docs/screenshots/3-블록-놓기.png)
 
 ## 설치 및 실행
 
